@@ -69,6 +69,22 @@ class OggOpusPlayerPlugin : FlutterPlugin, MethodCallHandler {
                 }
                 result.success(null)
             }
+            "seek" -> {
+                val playerId = call.argument<Int>("playerId")
+                val position = call.argument<Double>("position")
+                val player = players[playerId]
+                if (player == null || position == null || !position.isFinite()) {
+                    result.error("seek_failed", "Player or position is invalid", null)
+                } else {
+                    try {
+                        val actualPosition = player.seek(position)
+                        handlePlayerStateChanged(playerId!!, player)
+                        result.success(actualPosition)
+                    } catch (error: Exception) {
+                        result.error("seek_failed", "Could not seek the audio file", null)
+                    }
+                }
+            }
             "setPlaybackSpeed" -> {
                 val playerId = call.argument<Int>("playerId")
                 val speed = call.argument<Double>("speed")

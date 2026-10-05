@@ -119,3 +119,11 @@ for macOS, you also need update your `DebugProfile.entitlements` and `ReleasePro
 ## LICENSE
 
 see LICENSE file
+
+### Seeking local voice files
+
+On Android, iOS and macOS, `await player.seek(Duration(seconds: 12))` changes
+the position without changing play/pause state. Negative positions are clamped
+to zero and positions beyond the file duration are clamped to its end.
+`currentPosition` reports the selected position in seconds after completion.
+Windows and Linux currently throw `UnsupportedError` for seeking.

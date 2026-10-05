@@ -86,6 +86,11 @@ abstract class OggOpusPlayer {
 
   void dispose();
 
+  /// Seeks a local file, preserving play/pause state.
+  /// Supported on Android, iOS and macOS; other platforms throw.
+  Future<void> seek(Duration position) => Future.error(
+      UnsupportedError('Seeking is not supported on this platform'));
+
   ValueListenable<PlayerState> get state;
 
   /// Current playing position, in seconds.

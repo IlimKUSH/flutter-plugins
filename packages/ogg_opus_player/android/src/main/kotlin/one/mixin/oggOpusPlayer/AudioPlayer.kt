@@ -81,6 +81,26 @@ class AudioPlayer(
         player.playWhenReady = true
     }
 
+    fun seek(positionSeconds: Double): Double {
+        val requestedMs = (positionSeconds * 1000).toLong().coerceAtLeast(0)
+        val durationMs = player.duration
+        val positionMs = if (durationMs != C.TIME_UNSET && durationMs >= 0) {
+            requestedMs.coerceAtMost(durationMs)
+        } else {
+            requestedMs
+        }
+        player.seekTo(positionMs)
+        return position
+    }
+
+    override fun onPositionDiscontinuity(
+        oldPosition: Player.PositionInfo,
+        newPosition: Player.PositionInfo,
+        reason: Int,
+    ) {
+        callback(this)
+    }
+
     fun pause() {
         player.playWhenReady = false
     }

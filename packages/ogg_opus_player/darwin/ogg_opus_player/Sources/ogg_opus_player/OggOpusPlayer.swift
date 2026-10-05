@@ -10,6 +10,7 @@ final class OggOpusPlayer {
     case addPropertyListener
     case stop
     case cancelled
+    case reset
   }
 
   enum Status: Int {
@@ -25,9 +26,9 @@ final class OggOpusPlayer {
     var timeStamp = AudioTimeStamp()
     let status = AudioQueueGetCurrentTime(audioQueue, nil, &timeStamp, nil)
     if status == noErr {
-      return timeStamp.mSampleTime / sampleRate
+      return positionOffset + max(0, timeStamp.mSampleTime - queueSampleOrigin) / sampleRate
     } else {
-      return 0
+      return positionOffset
     }
   }
 
@@ -59,6 +60,10 @@ final class OggOpusPlayer {
   private let numberOfBuffers = 3
 
   private var buffers = [AudioQueueBufferRef]()
+  private var positionOffset: Double = 0
+  private var queueSampleOrigin: Double = 0
+  private var hasPrimedBuffers = false
+  fileprivate var isResettingQueue = false
 
   private lazy var format: AudioStreamBasicDescription = {
     let mBitsPerChannel: UInt32 = 16
@@ -138,19 +143,36 @@ final class OggOpusPlayer {
 
   func play() {
     assert(Queue.main.isCurrent)
-    switch status {
-    case .stopped:
-      status = .playing
-      for i in 0 ..< numberOfBuffers {
-        bufferCallback(inUserData: selfAsRawPointer, inAQ: audioQueue, inBuffer: buffers[i])
-      }
-      AudioQueueStart(audioQueue, nil)
-    case .playing:
-      break
-    case .paused:
-      status = .playing
-      AudioQueueStart(audioQueue, nil)
+    guard status != .playing else { return }
+    if currentTime >= reader.duration {
+      status = .stopped
+      return
     }
+    status = .playing
+    if !hasPrimedBuffers {
+      hasPrimedBuffers = true
+      for buffer in buffers {
+        bufferCallback(inUserData: selfAsRawPointer, inAQ: audioQueue, inBuffer: buffer)
+      }
+    }
+    AudioQueueStart(audioQueue, nil)
+  }
+
+  func seek(to seconds: Double) throws -> Double {
+    assert(Queue.main.isCurrent)
+    let wasPlaying = status == .playing
+    isResettingQueue = true
+    defer { isResettingQueue = false }
+    guard AudioQueueStop(audioQueue, true) == noErr,
+          AudioQueueReset(audioQueue) == noErr else { throw Error.reset }
+    hasPrimedBuffers = false
+    positionOffset = try reader.seek(to: seconds)
+    var timestamp = AudioTimeStamp()
+    queueSampleOrigin = AudioQueueGetCurrentTime(audioQueue, nil, &timestamp, nil) == noErr
+      ? timestamp.mSampleTime : 0
+    status = .paused
+    if wasPlaying { play() }
+    return positionOffset
   }
 
   func pause() {
@@ -210,6 +232,11 @@ fileprivate func runningChangedCallback(
     return
   }
   let player = Unmanaged<OggOpusPlayer>.fromOpaque(ptr).takeUnretainedValue()
+  guard !player.isResettingQueue else { return }
+  var isRunning: UInt32 = 0
+  var size = UInt32(MemoryLayout.size(ofValue: isRunning))
+  guard AudioQueueGetProperty(inAQ, kAudioQueueProperty_IsRunning, &isRunning, &size) == noErr,
+        isRunning == 0 else { return }
   if player.reader.didReachEnd {
     player.status = .stopped
   }

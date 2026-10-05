@@ -55,10 +55,10 @@ Future<dynamic> _handleMethodCall(MethodCall call) async {
       if (player == null) {
         return;
       }
-      player._playerState.value = _convertFromRawValue(state);
       player._lastUpdateTimeStamp = updateTime;
       player._position = position;
       player._playbackRate = speed ?? 1.0;
+      player._playerState.value = _convertFromRawValue(state);
       break;
     case "onRecorderCanceled":
       final recorderId = call.arguments['recorderId'] as int;
@@ -238,8 +238,26 @@ class OggOpusPlayerPluginImpl extends OggOpusPlayer {
   }
 
   @override
+  Future<void> seek(Duration position) async {
+    await _createCompleter.future;
+    if (_playerId <= 0) throw StateError('Player is not available');
+    final positionSeconds =
+        position.inMicroseconds.clamp(0, 0x7fffffffffffffff) / 1000000;
+    final actualPosition = await _channel.invokeMethod<double>('seek', {
+      'playerId': _playerId,
+      'position': positionSeconds,
+    });
+    if (actualPosition == null) throw StateError('Missing seek position');
+    _position = actualPosition;
+    _lastUpdateTimeStamp = SystemClock.uptime().inMilliseconds;
+  }
+
+  @override
   void dispose() {
-    _channel.invokeMethod("stop", _playerId);
+    final playerId = _playerId;
+    _playerId = -1;
+    _players.remove(playerId);
+    unawaited(_channel.invokeMethod<void>("stop", playerId));
   }
 }
 

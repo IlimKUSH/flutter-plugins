@@ -96,6 +96,21 @@ public class SwiftOggOpusPlayerPlugin: NSObject, FlutterPlugin {
         playerDictionary.removeValue(forKey: playerId)
       }
       result(nil)
+    case "seek":
+      guard let args = call.arguments as? [String: Any],
+            let playerId = args["playerId"] as? Int,
+            let position = args["position"] as? Double, position.isFinite,
+            let player = playerDictionary[playerId] else {
+        result(FlutterError(code: "seek_failed", message: "Player or position is invalid", details: nil))
+        break
+      }
+      do {
+        let actualPosition = try player.seek(to: position)
+        handlePlayerStateChanged(id: playerId, player)
+        result(actualPosition)
+      } catch {
+        result(FlutterError(code: "seek_failed", message: "Could not seek the audio file", details: nil))
+      }
     case "setPlaybackSpeed":
       if let args = call.arguments as? [String: Any],
          let playerId = args["playerId"] as? Int,
